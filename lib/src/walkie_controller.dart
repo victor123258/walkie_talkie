@@ -367,7 +367,18 @@ class WalkieController extends ChangeNotifier {
   void _broadcast(String msg) {
     if (_sendSocket == null) return;
     final bytes = utf8.encode(msg);
-    for (final target in _broadcastTargets) {
+    // Voice packets are larger than one Wi-Fi frame, so the OS IP-fragments
+    // them. Android delivers fragmented *unicast* datagrams reliably but
+    // routinely drops fragmented *broadcast* datagrams. After beacon discovery
+    // has taught us a peer's real IP, send to it directly (unicast) too, so the
+    // only broadcast dependency is the small beacon. Broadcast stays as the
+    // initial-contact fallback.
+    final targets = <String>{..._broadcastTargets};
+    for (final peer in _peers.values) {
+      final addr = peer.address;
+      if (addr.isNotEmpty) targets.add(addr);
+    }
+    for (final target in targets) {
       try {
         _sendSocket!.send(bytes, InternetAddress(target), AppConfig.udpPort);
       } catch (_) {}
